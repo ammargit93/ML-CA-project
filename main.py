@@ -39,7 +39,7 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
-st.title("🤖 Machine Learning Classifier Comparison Dashboard")
+st.title("🤖 Gaussian Process Classifier Comparison Dashboard")
 
 # ---------------------------
 # Sidebar Dataset Selection
