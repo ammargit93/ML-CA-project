@@ -43,7 +43,7 @@ df = None
 dataset_name = None
 
 if dataset_choice == "Use Sample Dataset":
-    sample_file = st.sidebar.selectbox("Select a sample dataset", ("moons.csv", "iris.csv", "breastcancer.csv"))
+    sample_file = st.sidebar.selectbox("Select a sample dataset", ("moons.csv", "iris.csv"))
     df = pd.read_csv(sample_file)
     dataset_name = sample_file
     st.write(f"### Loaded Sample Dataset: {sample_file}")
@@ -68,8 +68,6 @@ if dataset_name == "moons.csv":
     target_col = "label"
 elif dataset_name == "iris.csv":
     target_col = "Species"
-elif dataset_name == "breastcancer.csv":
-    target_col = "diagnosis"
 else:
     target_col = st.sidebar.selectbox("Select Target Column", df.columns)
 
@@ -156,7 +154,7 @@ results_df = results_df.sort_values(by="Accuracy", ascending=False)
 st.write("## 📊 Accuracy Comparison")
 st.dataframe(results_df, width="stretch")
 
-fig, ax = plt.subplots(figsize=(8, 5))
+fig, ax = plt.subplots(figsize=(4, 2))
 results_df["Accuracy"].plot(kind="bar", ax=ax, color="skyblue")
 ax.set_ylabel("Accuracy")
 ax.set_ylim(0, 1)
@@ -200,6 +198,37 @@ try:
 
 except Exception as e:
     st.error(f"Gaussian Process evaluation failed: {e}")
+# ---------------------------
+# 🧭 Class Separation Visualization
+# ---------------------------
+from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
+
+st.write("## 🎨 Data Visualization: Class Separation")
+
+visual_method = st.radio("Select Visualization Method", ("PCA", "t-SNE"), horizontal=True)
+
+# Reduce to 2 dimensions for visualization
+try:
+    if X.shape[1] > 2:
+        if visual_method == "PCA":
+            reducer = PCA(n_components=2)
+        else:
+            reducer = TSNE(n_components=2, random_state=42, perplexity=min(30, len(X)//5))
+        X_vis = reducer.fit_transform(X)
+    else:
+        X_vis = X.values
+
+    vis_df = pd.DataFrame(X_vis, columns=["Dim1", "Dim2"])
+    vis_df["label"] = y
+
+    fig, ax = plt.subplots(figsize=(7, 5))
+    sns.scatterplot(data=vis_df, x="Dim1", y="Dim2", hue="label", palette="viridis", s=50, alpha=0.8, ax=ax)
+    ax.set_title(f"{visual_method} Projection of Dataset")
+    st.pyplot(fig)
+
+except Exception as e:
+    st.warning(f"Visualization failed: {e}")
 
 # ---------------------------
 # Save Model
