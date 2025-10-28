@@ -229,6 +229,44 @@ try:
 
 except Exception as e:
     st.warning(f"Visualization failed: {e}")
+# ---------------------------
+# 🧩 Decision Boundary Visualization
+# ---------------------------
+st.write("## 🧩 Decision Boundary Visualization (2D)")
+
+if X.shape[1] > 2:
+    # Use the same reduced 2D data (PCA or t-SNE)
+    X_plot = X_vis
+else:
+    X_plot = X.values
+
+try:
+    # Train GPC again on the 2D data
+    gpc_2d = GaussianProcessClassifier(kernel=kernel, n_restarts_optimizer=restarts, max_iter_predict=max_iter_predict)
+    gpc_2d.fit(X_plot, y)
+
+    # Create a mesh grid
+    x_min, x_max = X_plot[:, 0].min() - 1, X_plot[:, 0].max() + 1
+    y_min, y_max = X_plot[:, 1].min() - 1, X_plot[:, 1].max() + 1
+    xx, yy = np.meshgrid(np.linspace(x_min, x_max, 200), np.linspace(y_min, y_max, 200))
+    grid = np.c_[xx.ravel(), yy.ravel()]
+
+    # Predict probabilities for each point on the grid
+    Z = gpc_2d.predict(grid)
+    Z = Z.reshape(xx.shape)
+
+    # Plot decision boundary
+    fig, ax = plt.subplots(figsize=(7, 5))
+    plt.contourf(xx, yy, Z, alpha=0.3, cmap="coolwarm")
+    sns.scatterplot(
+        x=X_plot[:, 0], y=X_plot[:, 1],
+        hue=y, palette="viridis", s=50, edgecolor="k", ax=ax
+    )
+    ax.set_title(f"{visual_method} Projection with GPC Decision Boundary")
+    st.pyplot(fig)
+
+except Exception as e:
+    st.warning(f"Decision boundary visualization failed: {e}")
 
 # ---------------------------
 # Save Model
