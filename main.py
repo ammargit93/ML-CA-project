@@ -26,12 +26,15 @@ from sklearn.ensemble import (
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.impute import SimpleImputer
+from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
+from xgboost import XGBClassifier  # ✅ XGBoost import
 
 # ---------------------------
 # Streamlit Configuration
 # ---------------------------
 st.set_page_config(page_title="Enhanced ML Classifier App", layout="wide", initial_sidebar_state="expanded")
-st.title("🤖 Gaussian Process Classifier Comparison Dashboard")
+st.title("🤖 Gaussian Process + XGBoost Classifier Dashboard")
 
 # ---------------------------
 # Sidebar Dataset Selection
@@ -98,10 +101,7 @@ X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, r
 # ---------------------------
 st.sidebar.header("🎛️ Gaussian Process Tuning")
 
-kernel_choice = st.sidebar.selectbox(
-    "Select Kernel Type",
-    ("RBF", "Matern", "RationalQuadratic")
-)
+kernel_choice = st.sidebar.selectbox("Select Kernel Type", ("RBF", "Matern", "RationalQuadratic"))
 length_scale = st.sidebar.slider("Kernel Length Scale", 0.1, 10.0, 1.0)
 restarts = st.sidebar.slider("Optimizer Restarts", 0, 10, 3)
 max_iter_predict = st.sidebar.slider("Max Iter Predict", 50, 1000, 100)
@@ -114,7 +114,7 @@ else:
     kernel = 1.0 * RationalQuadratic(length_scale=length_scale, alpha=0.5)
 
 # ---------------------------
-# Classifiers
+# Classifiers (including XGBoost)
 # ---------------------------
 classifiers = {
     "Gaussian Process": GaussianProcessClassifier(kernel=kernel, n_restarts_optimizer=restarts, max_iter_predict=max_iter_predict),
@@ -126,6 +126,15 @@ classifiers = {
     "Gradient Boosting": GradientBoostingClassifier(),
     "AdaBoost": AdaBoostClassifier(),
     "Extra Trees": ExtraTreesClassifier(),
+    "XGBoost": XGBClassifier(  # ✅ Added XGBoost here
+        eval_metric="logloss",
+        n_estimators=200,
+        learning_rate=0.1,
+        max_depth=4,
+        subsample=0.8,
+        colsample_bytree=0.8,
+        random_state=42
+    ),
 }
 
 # ---------------------------
@@ -184,31 +193,47 @@ try:
     st.write(f"**F1-score:** {f1:.3f}")
     st.write(f"**Log Loss:** {ll:.3f}")
 
-    # Confusion Matrix
     st.write("### Confusion Matrix")
     cm = confusion_matrix(y_test, y_pred)
     fig, ax = plt.subplots()
     sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", ax=ax)
     st.pyplot(fig)
 
-    # Cross-validation
     if st.checkbox("Run 5-Fold CV for GPC"):
         cv_scores = cross_val_score(gpc, X, y, cv=5)
         st.write(f"**Average CV Accuracy:** {cv_scores.mean():.3f} ± {cv_scores.std():.3f}")
 
 except Exception as e:
     st.error(f"Gaussian Process evaluation failed: {e}")
+
+# ---------------------------
+# 🌟 XGBoost Feature Importance Visualization
+# ---------------------------
+if "XGBoost" in classifiers:
+    st.write("---")
+    st.subheader("🌟 XGBoost Feature Importance")
+    try:
+        xgb_model = classifiers["XGBoost"]
+        if hasattr(xgb_model, "feature_importances_"):
+            importance_df = pd.DataFrame({
+                "Feature": X.columns,
+                "Importance": xgb_model.feature_importances_
+            }).sort_values(by="Importance", ascending=False)
+
+            fig, ax = plt.subplots(figsize=(6, 3))
+            sns.barplot(x="Importance", y="Feature", data=importance_df, ax=ax)
+            ax.set_title("XGBoost Feature Importance")
+            st.pyplot(fig)
+    except Exception as e:
+        st.warning(f"Feature importance plot failed: {e}")
+
 # ---------------------------
 # 🧭 Class Separation Visualization
 # ---------------------------
-from sklearn.decomposition import PCA
-from sklearn.manifold import TSNE
-
 st.write("## 🎨 Data Visualization: Class Separation")
 
 visual_method = st.radio("Select Visualization Method", ("PCA", "t-SNE"), horizontal=True)
 
-# Reduce to 2 dimensions for visualization
 try:
     if X.shape[1] > 2:
         if visual_method == "PCA":
@@ -229,39 +254,32 @@ try:
 
 except Exception as e:
     st.warning(f"Visualization failed: {e}")
+
 # ---------------------------
 # 🧩 Decision Boundary Visualization
 # ---------------------------
 st.write("## 🧩 Decision Boundary Visualization (2D)")
 
 if X.shape[1] > 2:
-    # Use the same reduced 2D data (PCA or t-SNE)
     X_plot = X_vis
 else:
     X_plot = X.values
 
 try:
-    # Train GPC again on the 2D data
     gpc_2d = GaussianProcessClassifier(kernel=kernel, n_restarts_optimizer=restarts, max_iter_predict=max_iter_predict)
     gpc_2d.fit(X_plot, y)
 
-    # Create a mesh grid
     x_min, x_max = X_plot[:, 0].min() - 1, X_plot[:, 0].max() + 1
     y_min, y_max = X_plot[:, 1].min() - 1, X_plot[:, 1].max() + 1
     xx, yy = np.meshgrid(np.linspace(x_min, x_max, 200), np.linspace(y_min, y_max, 200))
     grid = np.c_[xx.ravel(), yy.ravel()]
 
-    # Predict probabilities for each point on the grid
     Z = gpc_2d.predict(grid)
     Z = Z.reshape(xx.shape)
 
-    # Plot decision boundary
     fig, ax = plt.subplots(figsize=(7, 5))
     plt.contourf(xx, yy, Z, alpha=0.3, cmap="coolwarm")
-    sns.scatterplot(
-        x=X_plot[:, 0], y=X_plot[:, 1],
-        hue=y, palette="viridis", s=50, edgecolor="k", ax=ax
-    )
+    sns.scatterplot(x=X_plot[:, 0], y=X_plot[:, 1], hue=y, palette="viridis", s=50, edgecolor="k", ax=ax)
     ax.set_title(f"{visual_method} Projection with GPC Decision Boundary")
     st.pyplot(fig)
 
